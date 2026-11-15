@@ -42,3 +42,10 @@ terraform.rc
 # Optional: ignore plan files saved before destroying Terraform configuration
 # Uncomment the line below if you want to ignore planout files.
 # planout
+
+# --- Lab 2 ---
+# dev.tfvars no tiene secretos y lo usa el pipeline (Lab 3)
+!dev.tfvars
+# Plan guardado: puede contener valores sensibles
+tfplan
+*.tfplan
