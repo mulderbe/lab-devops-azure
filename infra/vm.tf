@@ -17,6 +17,7 @@ resource "azurerm_network_interface" "vm" {
 }
 
 resource "azurerm_linux_virtual_machine" "web" {
+  #checkov:skip=CKV_AZURE_50:El Lab 6 instala el agente de Azure Monitor como extension
   count                           = var.vm_enabled ? 1 : 0
   name                            = "vm-${local.nombre}-web" # vm-lab-dev-web
   location                        = azurerm_resource_group.dev.location

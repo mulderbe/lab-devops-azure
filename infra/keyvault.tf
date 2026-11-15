@@ -1,6 +1,12 @@
 # keyvault.tf — Key Vault en modo RBAC, sus permisos, sus secretos y sus logs.
 
 resource "azurerm_key_vault" "dev" {
+
+  #checkov:skip=CKV_AZURE_42:Lab - se purga al destruir para recrearlo con el mismo nombre
+  #checkov:skip=CKV_AZURE_110:Lab - igual que CKV_AZURE_42; en produccion purge_protection_enabled = true
+  #checkov:skip=CKV_AZURE_109:Lab - los runners de GitHub necesitan acceso publico; en produccion firewall + runner privado
+  #checkov:skip=CKV_AZURE_189:Lab - mismo motivo que CKV_AZURE_109
+  #checkov:skip=CKV2_AZURE_32:Lab - sin private endpoint para no pagar DNS privado; en produccion obligatorio
   name                       = "kv-${local.nombre}-${random_string.sufijo.result}" # p. ej. kv-lab-dev-a1b2
   location                   = azurerm_resource_group.dev.location
   resource_group_name        = azurerm_resource_group.dev.name
@@ -10,6 +16,7 @@ resource "azurerm_key_vault" "dev" {
   soft_delete_retention_days = 7     # lo mínimo que permite Azure
   purge_protection_enabled   = false # Lab. Producción: true (nadie puede purgar antes de tiempo)
   tags                       = local.tags
+
 
   # Lab: acceso público, protegido por identidad + rol.
   # Producción: public_network_access_enabled = false y un private endpoint.
@@ -46,19 +53,22 @@ resource "tls_private_key" "vm" {
 }
 
 resource "azurerm_key_vault_secret" "vm_ssh_privada" {
-  name         = "vm-ssh-clave-privada"
-  value        = tls_private_key.vm.private_key_openssh
-  key_vault_id = azurerm_key_vault.dev.id
-  content_type = "text/plain"
-  depends_on   = [time_sleep.espera_rbac_kv]
+  name            = "vm-ssh-clave-privada"
+  value           = tls_private_key.vm.private_key_openssh
+  key_vault_id    = azurerm_key_vault.dev.id
+  content_type    = "text/plain"
+  expiration_date = time_offset.vence_secretos.rfc3339
+  depends_on      = [time_sleep.espera_rbac_kv]
 }
 
 # Secreto de prueba que leerá la VM con su propia identidad.
 resource "azurerm_key_vault_secret" "mensaje" {
-  name         = "mensaje-lab"
-  value        = "Si lees esto, la identidad administrada de la VM funciona"
-  key_vault_id = azurerm_key_vault.dev.id
-  depends_on   = [time_sleep.espera_rbac_kv]
+  name            = "mensaje-lab"
+  value           = "Si lees esto, la identidad administrada de la VM funciona"
+  key_vault_id    = azurerm_key_vault.dev.id
+  depends_on      = [time_sleep.espera_rbac_kv]
+  expiration_date = time_offset.vence_secretos.rfc3339
+  content_type    = "text/plain"
 }
 
 # --- Logs de auditoría: quién leyó qué secreto y cuándo ---------------------------------
@@ -72,3 +82,8 @@ resource "azurerm_monitor_diagnostic_setting" "kv" {
     category_group = "audit"
   }
 }
+# Fecha fija: 90 días desde que se crea este recurso. No cambia en cada plan.
+resource "time_offset" "vence_secretos" {
+  offset_days = 90
+}
+
