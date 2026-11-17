@@ -6,6 +6,8 @@ on:
     paths:
       - "infra/**"
       - ".github/workflows/**"
+      - "k8s/**"
+      - ".github/workflows/**"
 
 permissions:
   contents: read

@@ -1,0 +1,100 @@
+name: AKS PR
+
+on:
+  pull_request:
+    branches: [main]
+    paths: # la misma lista que terraform-pr.yml: los 4 checks salen en cada PR
+      - "infra/**"
+      - "infra-aks/**"
+      - "k8s/**"
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-dev-aks
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  calidad:
+    name: AKS - Calidad y seguridad
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra-aks
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+
+      - name: Formato
+        run: terraform fmt -check -recursive -diff
+
+      - name: Validar
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.66.0
+
+      - name: TFLint
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          tflint --init
+          tflint --format compact
+
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: infra-aks
+          framework: terraform
+          quiet: true
+          soft_fail: false
+
+  plan:
+    name: AKS - Terraform plan
+    needs: calidad
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: "true"
+    defaults:
+      run:
+        working-directory: infra-aks
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+
+      - name: Init
+        run: terraform init -input=false
+
+      - name: Plan
+        run: terraform plan -input=false -lock-timeout=5m -var-file=dev.tfvars -out=tfplan
+
+      - name: Publicar el plan en el resumen
+        run: |
+          {
+            echo "## Plan de Terraform (AKS dev)"
+            echo '```'
+            terraform show -no-color tfplan | tail -c 60000
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
