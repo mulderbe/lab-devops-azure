@@ -40,6 +40,11 @@ jobs:
 
       # El clúster no tiene cuentas locales: kubectl entra con Entra ID gracias a kubelogin.
       - uses: azure/use-kubelogin@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          kubelogin-version: 'latest'
+      ###
 
       - name: Credenciales del clúster
         run: |
