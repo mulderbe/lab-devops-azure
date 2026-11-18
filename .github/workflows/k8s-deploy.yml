@@ -1,0 +1,73 @@
+name: App en AKS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "k8s/**"
+      - ".github/workflows/k8s-deploy.yml"
+  workflow_dispatch: # para volver a desplegar después de recrear el clúster
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: k8s-dev
+  cancel-in-progress: false
+
+env:
+  RG: rg-lab-dev
+  AKS: aks-lab-dev
+  IDENTIDAD_APP: id-app-lab-dev
+
+jobs:
+  deploy:
+    name: Desplegar la app
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v7
+
+      # Aquí sí hace falta "az": pide las credenciales del clúster y lee nombres de Azure.
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/setup-kubectl@v5
+
+      # El clúster no tiene cuentas locales: kubectl entra con Entra ID gracias a kubelogin.
+      - uses: azure/use-kubelogin@v1
+
+      - name: Credenciales del clúster
+        run: |
+          az aks get-credentials -g "$RG" -n "$AKS" --overwrite-existing
+          kubelogin convert-kubeconfig -l azurecli
+          kubectl get nodes
+
+      - name: Valores para los manifiestos
+        run: |
+          echo "APP_CLIENT_ID=$(az identity show -g "$RG" -n "$IDENTIDAD_APP" --query clientId -o tsv)" >> "$GITHUB_ENV"
+          echo "KV_NAME=$(az keyvault list -g "$RG" --query '[0].name' -o tsv)" >> "$GITHUB_ENV"
+          echo "TENANT_ID=$(az account show --query tenantId -o tsv)" >> "$GITHUB_ENV"
+
+      - name: Desplegar
+        run: |
+          # Reemplaza SOLO estas 3 variables; el resto del YAML queda igual.
+          for f in k8s/*.yaml; do
+            envsubst '$APP_CLIENT_ID $KV_NAME $TENANT_ID' < "$f"
+            echo "---"
+          done > manifiestos.yaml
+          kubectl apply -f manifiestos.yaml
+          kubectl -n app rollout status deployment/web --timeout=180s
+
+      - name: Publicar el estado en el resumen
+        run: |
+          {
+            echo "## App en AKS"
+            echo '```'
+            kubectl -n app get deployment,pods,service -o wide
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
