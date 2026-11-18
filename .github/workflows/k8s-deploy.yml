@@ -60,10 +60,11 @@ jobs:
 
       - name: Desplegar
         run: |
+         run: |
           # Reemplaza SOLO estas 3 variables; el resto del YAML queda igual.
           for f in k8s/*.yaml; do
             envsubst '$APP_CLIENT_ID $KV_NAME $TENANT_ID' < "$f"
-            echo "---"
+            printf '\n---\n'
           done > manifiestos.yaml
           kubectl apply -f manifiestos.yaml
           kubectl -n app rollout status deployment/web --timeout=180s
