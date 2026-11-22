@@ -52,7 +52,7 @@ spec:
               port: 80
             initialDelaySeconds: 15
             periodSeconds: 10
-            volumeMounts: # Paso 7: los secretos aparecen como archivos
+          volumeMounts: # Paso 7: los secretos aparecen como archivos
             - name: secretos
               mountPath: /mnt/secretos
               readOnly: true
