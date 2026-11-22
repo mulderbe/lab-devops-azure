@@ -22,6 +22,7 @@ spec:
     metadata:
       labels:
         app: web
+        azure.workload.identity/use: "true" # Paso 7: inyecta el token de la identidad
     spec:
       serviceAccountName: sa-app
       containers:
@@ -51,6 +52,18 @@ spec:
               port: 80
             initialDelaySeconds: 15
             periodSeconds: 10
+            volumeMounts: # Paso 7: los secretos aparecen como archivos
+            - name: secretos
+              mountPath: /mnt/secretos
+              readOnly: true
+      volumes: # Paso 7
+        - name: secretos
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: kv-lab
+
 ---
 # Service LoadBalancer: AKS crea una IP pública en el balanceador y reparte el tráfico entre los Pods.
 apiVersion: v1
