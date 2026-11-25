@@ -3,10 +3,12 @@ name: AKS PR
 on:
   pull_request:
     branches: [main]
-    paths: # la misma lista que terraform-pr.yml: los 4 checks salen en cada PR
+    paths: # la misma lista en terraform-pr, aks-pr y serverless-pr: los 6 checks salen en cada PR
       - "infra/**"
       - "infra-aks/**"
+      - "infra-serverless/**"
       - "k8s/**"
+      - "apps/**"
       - ".github/workflows/**"
 
 permissions:
