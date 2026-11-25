@@ -1,0 +1,88 @@
+name: Serverless apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra-serverless/**"
+  workflow_dispatch: # para volver a crear el stack después de un destroy
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: terraform-dev-serverless
+  cancel-in-progress: false
+
+env:
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_USE_OIDC: "true"
+  TF_IN_AUTOMATION: "true"
+
+jobs:
+  plan:
+    name: Serverless - Plan de main
+    runs-on: ubuntu-latest
+    outputs:
+      cambios: ${{ steps.plan.outputs.cambios }}
+    defaults:
+      run:
+        working-directory: infra-serverless
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+
+      - name: Init
+        run: terraform init -input=false
+
+      - name: Plan
+        id: plan
+        run: |
+          set +e
+          terraform plan -input=false -lock-timeout=5m -var-file=dev.tfvars -detailed-exitcode -out=tfplan
+          codigo=$?
+          set -e
+          if [ "$codigo" -eq 1 ]; then exit 1; fi
+          if [ "$codigo" -eq 2 ]; then echo "cambios=true" >> "$GITHUB_OUTPUT"; else echo "cambios=false" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Publicar el plan en el resumen
+        run: |
+          {
+            echo "## Plan que se aplicará en serverless dev"
+            echo '```'
+            terraform show -no-color tfplan | tail -c 60000
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    name: Serverless - Apply en dev
+    needs: plan
+    if: needs.plan.outputs.cambios == 'true'
+    runs-on: ubuntu-latest
+    environment: dev
+    defaults:
+      run:
+        working-directory: infra-serverless
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+
+      - name: Init
+        run: terraform init -input=false
+
+      - name: Plan
+        run: terraform plan -input=false -lock-timeout=5m -var-file=dev.tfvars -out=tfplan
+
+      - name: Apply
+        run: terraform apply -input=false -lock-timeout=5m tfplan

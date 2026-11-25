@@ -3,10 +3,12 @@ name: Terraform PR
 on:
   pull_request:
     branches: [main]
-    paths:
+    paths: # la misma lista en terraform-pr, aks-pr y serverless-pr: los 6 checks salen en cada PR
       - "infra/**"
-      - ".github/workflows/**"
+      - "infra-aks/**"
+      - "infra-serverless/**"
       - "k8s/**"
+      - "apps/**"
       - ".github/workflows/**"
 
 permissions:
