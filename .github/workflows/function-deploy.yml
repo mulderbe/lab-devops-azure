@@ -50,7 +50,12 @@ jobs:
 
       - name: Probar y publicar el resultado
         run: |
-          URL="https://$(az functionapp show -g "$RG" -n "$FUNC" --query defaultHostName -o tsv)/api/hola"
+          HOST=$(az functionapp show -g "$RG" -n "$FUNC" --query properties.defaultHostName -o tsv)
+          if [ -z "$HOST" ]; then
+            echo "::error::No se pudo obtener el host de $FUNC"
+            exit 1
+          fi
+          URL="https://$HOST/api/hola"
           {
             echo "## Function en Flex Consumption"
             echo "URL: $URL"
