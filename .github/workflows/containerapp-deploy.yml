@@ -59,14 +59,17 @@ jobs:
 
       - name: Publicar el estado en el resumen
         run: |
-          HOST=$(az functionapp show -g "$RG" -n "$FUNC" --query properties.defaultHostName -o tsv)
-          if [ -z "$HOST" ]; then
-            echo "::error::No se pudo obtener el host de $FUNC"
+          FQDN=$(az containerapp show -g "$RG" -n "$APP" --query properties.configuration.ingress.fqdn -o tsv)
+          REV=$(az containerapp show -g "$RG" -n "$APP" --query properties.latestRevisionName -o tsv)
+          if [ -z "$FQDN" ]; then
+            echo "::error::No se pudo obtener la URL de $APP (¿ingress externo habilitado?)"
             exit 1
           fi
-          URL="https://$HOST/api/hola"
+          URL="https://$FQDN"
           {
-            echo "## Function en Flex Consumption"
+            echo "## Container App desplegada"
+            echo "Imagen: $ACR_SERVIDOR/web:$VERSION"
+            echo "Revisión: $REV"
             echo "URL: $URL"
             echo '```'
             curl -sS --fail-with-body --retry 5 --retry-delay 15 --retry-all-errors "$URL"
