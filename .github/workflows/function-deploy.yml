@@ -1,0 +1,60 @@
+name: Function en Flex Consumption
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/funcion/**"
+      - ".github/workflows/function-deploy.yml"
+  workflow_dispatch: # para volver a desplegar después de recrear el stack
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: function-dev
+  cancel-in-progress: false
+
+env:
+  RG: rg-lab-dev
+
+jobs:
+  deploy:
+    name: Desplegar la Function
+    runs-on: ubuntu-latest
+    environment: dev
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Nombre de la Function
+        run: |
+          echo "FUNC=$(az functionapp list -g "$RG" --query "[?starts_with(name, 'func-')].name | [0]" -o tsv)" >> "$GITHUB_ENV"
+
+      - name: Empaquetar el código
+        run: |
+          # host.json debe quedar en la raíz del .zip, no dentro de una carpeta.
+          cd apps/funcion
+          zip -r ../../funcion.zip .
+          cd ../..
+          unzip -l funcion.zip
+
+      - name: Desplegar el paquete
+        run: az functionapp deployment source config-zip -g "$RG" -n "$FUNC" --src funcion.zip
+
+      - name: Probar y publicar el resultado
+        run: |
+          URL="https://$(az functionapp show -g "$RG" -n "$FUNC" --query defaultHostName -o tsv)/api/hola"
+          {
+            echo "## Function en Flex Consumption"
+            echo "URL: $URL"
+            echo '```'
+            curl -sS --fail-with-body --retry 5 --retry-delay 15 --retry-all-errors "$URL"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
