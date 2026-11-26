@@ -59,14 +59,16 @@ jobs:
 
       - name: Publicar el estado en el resumen
         run: |
-          URL="https://$(az containerapp show -n "$APP" -g "$RG" --query properties.configuration.ingress.fqdn -o tsv)"
+          HOST=$(az functionapp show -g "$RG" -n "$FUNC" --query properties.defaultHostName -o tsv)
+          if [ -z "$HOST" ]; then
+            echo "::error::No se pudo obtener el host de $FUNC"
+            exit 1
+          fi
+          URL="https://$HOST/api/hola"
           {
-            echo "## App en Container Apps"
+            echo "## Function en Flex Consumption"
             echo "URL: $URL"
             echo '```'
-            az containerapp revision list -n "$APP" -g "$RG" \
-              --query "[].{revision:name, activa:properties.active, trafico:properties.trafficWeight, estado:properties.runningState}" -o table
-            echo
-            curl -sS --fail-with-body --retry 5 --retry-delay 10 --retry-all-errors "$URL"
+            curl -sS --fail-with-body --retry 5 --retry-delay 15 --retry-all-errors "$URL"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
